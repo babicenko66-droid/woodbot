@@ -27,7 +27,11 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -256,7 +260,9 @@ public final class WoodBot {
         }
         Inventory inv = p.getInventory();
         if (inv.getSelectedSlot() != slot) inv.setSelectedSlot(slot);
-        if (!p.isUsingItem()) mc.gameMode.useItem(p, InteractionHand.MAIN_HAND);
+        // Vanilla cancels item use every tick unless the use key is held, so hold it.
+        p.setXRot(90.0f); // look at the ground so right-click can't hit a door/table/chest
+        mc.options.keyUse.setDown(true);
         return true;
     }
 
@@ -376,7 +382,7 @@ public final class WoodBot {
             }
         }
         if (reachable != null) {
-            mine(mc, p, reachable);
+            mine(mc, p, level, reachable);
             return;
         }
 
@@ -412,21 +418,37 @@ public final class WoodBot {
         if (tree != null) tree.logs.remove(log);
     }
 
-    private void mine(Minecraft mc, LocalPlayer p, BlockPos pos) {
+    private void mine(Minecraft mc, LocalPlayer p, ClientLevel level, BlockPos pos) {
         if (!pos.equals(miningPos)) {
             miningPos = pos;
             miningTicks = 0;
         }
-        if (++miningTicks > 300) { // 15 s without breaking: give up on this block
+        if (++miningTicks > 400) { // ~20 s without finishing: give up on this log
             ignoreLog(pos);
             miningPos = null;
             return;
         }
         Vec3 eye = p.getEyePosition();
-        Vec3 c = Vec3.atCenterOf(pos);
+        BlockPos breakPos = pos;
+
+        // If something (usually leaves) is between us and the log, break that first
+        BlockHitResult hit = level.clip(new ClipContext(eye, Vec3.atCenterOf(pos),
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, p));
+        if (hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(pos)) {
+            BlockState blocker = level.getBlockState(hit.getBlockPos());
+            if (blocker.is(BlockTags.LEAVES) || blocker.is(BlockTags.LOGS)) {
+                breakPos = hit.getBlockPos();
+            } else {
+                ignoreLog(pos); // blocked by something we don't want to break
+                miningPos = null;
+                return;
+            }
+        }
+
+        Vec3 c = Vec3.atCenterOf(breakPos);
         lookAt(p, c);
         Direction face = Direction.getApproximateNearest(eye.x - c.x, eye.y - c.y, eye.z - c.z);
-        if (mc.gameMode.continueDestroyBlock(pos, face)) {
+        if (mc.gameMode.continueDestroyBlock(breakPos, face)) {
             p.swing(InteractionHand.MAIN_HAND);
         }
     }
@@ -550,9 +572,9 @@ public final class WoodBot {
         o.keyAttack.setDown(false);
     }
 
-           private static void msg(Minecraft mc, String text, ChatFormatting color) {
+    private static void msg(Minecraft mc, String text, ChatFormatting color) {
         if (mc.player != null) {
-         mc.player.sendSystemMessage(Component.literal("[WoodBot] " + text).withStyle(color));
+            mc.player.sendSystemMessage(Component.literal("[WoodBot] " + text).withStyle(color));
         }
     }
 }
