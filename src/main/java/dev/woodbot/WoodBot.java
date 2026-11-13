@@ -550,9 +550,8 @@ public final class WoodBot {
         o.keyAttack.setDown(false);
     }
 
-    private static void msg(Minecraft mc, String text, ChatFormatting color) {
+       private static void msg(Minecraft mc, String text, ChatFormatting color) {
         if (mc.player != null) {
-            mc.player.displayClientMessage(Component.literal("[WoodBot] " + text).withStyle(color), false);
+            mc.gui.getChat().addMessage(Component.literal("[WoodBot] " + text).withStyle(color));
         }
     }
-}
