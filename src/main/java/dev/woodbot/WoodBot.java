@@ -552,7 +552,7 @@ public final class WoodBot {
 
            private static void msg(Minecraft mc, String text, ChatFormatting color) {
         if (mc.player != null) {
-            mc.gui.getChat().addMessage(Component.literal("[WoodBot] " + text).withStyle(color));
+         mc.player.sendSystemMessage(Component.literal("[WoodBot] " + text).withStyle(color));
         }
     }
 }
